@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum ChannelType {
+  PUBLIC
+  PRIVATE
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  user_name String   @unique
+  is_online Boolean @default(false)
+  last_ping DateTime?
+  password String
+  channels  UserChannel[]
+  messages  Message[]
+}
+
+model Session {
+  id String @id @default(uuid())
+  sid       String   @unique
+  data      String   
+  expiresAt DateTime
+  
+  @@map(name: "sessions")
+}
+
+model Channel {
+  id          String     @id @default(uuid())
+  createdAt   DateTime   @default(now())
+  name        String     @unique
+  type        ChannelType
+  messages    Message[]
+  userChannels UserChannel[]
+}
+
+model Message {
+  id         BigInt     @id @default(autoincrement())
+  createdAt DateTime   @default(now())
+  fromUser   User       @relation(fields: [fromUserId], references: [id])
+  fromUserId String
+  channel    Channel    @relation(fields: [channelId], references: [id])
+  channelId  String
+  content    String
+}
+
+model UserChannel {
+  userId     String
+  channelId  String
+  clientOffset BigInt?
+  user       User      @relation(fields: [userId], references: [id])
+  channel    Channel   @relation(fields: [channelId], references: [id])
+  
+  @@unique([userId, channelId])
+}
