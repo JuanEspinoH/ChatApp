@@ -22,20 +22,20 @@ const Navbar = () => {
   }
   const handleLogOut = async () => {
     await fetchFunc.logout()
-
-    socket.disconnect()
-
+    await socket.disconnect()
+    storeFunc.clean()
     navigate('/login')
   }
   return (
     <AppBar
       position="static"
       sx={{
-        height: 50,
-
+        height: '10%',
+        minHeight: '10vh',
         display: 'flex',
         flexDirection: 'row',
         justifyContent: 'space-between',
+        boxSizing: 'border-box',
         padding: '10px 20px',
       }}
     >

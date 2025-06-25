@@ -88,7 +88,7 @@ export const listMessages = async (query) => {
         },
         select: {
           id: true,
-          fromUser: true,
+          fromUserId: true,
           content: true,
           channelId: true,
         },
@@ -108,7 +108,8 @@ export const listMessages = async (query) => {
           },
         }
       }
-      messagesList = prisma.findMany(queryObject)
+
+      messagesList = await prisma.message.findMany(queryObject)
     } else {
       queryObject = {
         where: {
@@ -116,7 +117,7 @@ export const listMessages = async (query) => {
         },
         select: {
           id: true,
-          fromUser: true,
+          fromUserId: true,
           content: true,
           channelId: true,
         },
@@ -136,24 +137,25 @@ export const listMessages = async (query) => {
           },
         }
       }
-      messagesList = prisma.findMany(queryObject)
+      messagesList = await prisma.message.findMany(queryObject)
     }
 
     const hasMore = messagesList.length > query.size
     if (hasMore) {
       messagesList.pop()
     }
+
     return {
-      data: result.map((item) => ({
+      data: messagesList.map((item) => ({
         id: item.id,
         channelId: item.channelId,
-        from: item.fromUser,
+        from: item.fromUserId,
         content: item.content,
       })),
       hasMore,
     }
   } catch (error) {
-    console.log(e)
+    console.log(error)
   }
 }
 
@@ -162,7 +164,6 @@ export const ackMessage = async (userId, { channelId, messageId }) => {
     if (typeof callback !== 'function') {
       return
     }
-    console.log(payload, 'payload')
 
     if (!ackMessageValidate(payload)) {
       return callback({
@@ -182,7 +183,6 @@ export const ackMessage = async (userId, { channelId, messageId }) => {
           clientOffset: messageId,
         },
       })
-      console.log(req, 'req')
     } catch (error) {
       return callback({
         status: 'ERROR',
@@ -192,4 +192,65 @@ export const ackMessage = async (userId, { channelId, messageId }) => {
       status: 'OK',
     })
   }
+}
+
+export const isUserInChannel = async (userId, channelId) => {
+  const result = await prisma.channel.findUnique({
+    where: { id: channelId },
+    select: {
+      userChannels: {
+        where: { userId },
+        select: { userId: true },
+        take: 1,
+      },
+    },
+  })
+
+  return result.userChannels.length === 1
+}
+
+export const insertMessage = async (message) => {
+  const newMessage = await prisma.message.create({
+    data: {
+      fromUserId: message.from,
+      channelId: message.channelId,
+      content: message.content,
+    },
+  })
+
+  await prisma.userChannel.update({
+    where: {
+      userId_channelId: {
+        userId: message.from,
+        channelId: message.channelId,
+      },
+    },
+    data: {
+      clientOffset: newMessage.id,
+    },
+  })
+
+  return newMessage.id
+}
+
+export const getUser = async (userId) => {
+  const result = await prisma.user.findFirst({
+    where: {
+      id: userId,
+    },
+    select: {
+      id: true,
+      user_name: true,
+      is_online: true,
+    },
+  })
+  console.log(result)
+
+  // if(result){
+  //   return {
+  //     id
+  //   }
+  // }
+
+  return undefined
 }

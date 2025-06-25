@@ -5,8 +5,10 @@ import { ThemeProvider, createTheme } from '@mui/material/styles'
 import CssBaseline from '@mui/material/CssBaseline'
 import { RouterProvider } from 'react-router-dom'
 import { router } from './utils/routes.jsx'
-import Navbar from './components/Navbar.jsx'
+
 import { ProviderContextComponent } from './ContextStore/Provider.jsx'
+
+import App from './views/Home.jsx'
 
 const theme = createTheme({
   colorSchemes: {

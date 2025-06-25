@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
 import { StoreContext } from './Store'
 import { socket } from '../utils/socket'
+import useFetchData from '../utils/useFetchData'
+import { useNavigate } from 'react-router-dom'
+import { isValidUserData } from '../utils/utils.jsx'
 
 const insertAtRightOffset = (messages, message) => {
   message.mid = message.id ? parseInt(message.id, 10) : Infinity
@@ -30,15 +33,57 @@ export function ProviderContextComponent({ children }) {
     useState(false)
   const [showSearchUserModal, setShowSearchUserModal] = useState(false)
   const [conectionState, setConectionState] = useState(socket.connected)
+
+  // const [conectionState, setConectionState] = useState(socket.connected)
+  // const [conectionState, setConectionState] = useState(socket.connected)
+  // const [conectionState, setConectionState] = useState(socket.connected)
+
+  // USEEFFECT GLOBAL
+  // useEffect(() => {}, [])
+
   // STORE MODIFICATION FUNCTIONS
   const modifyCurrentUser = (data) => {
     return setCurrentUser(data)
+  }
+  const modifyChannels = (data) => {
+    return setChannels((prev) => {
+      return data(prev)
+    })
   }
   const modifyConectionState = (state) => {
     return setConectionState(state)
   }
   const modifyIsInitialized = (state) => {
     return setIsInitialized(state)
+  }
+  const modifySelectedChannelId = (state) => {
+    return setSelectedChannelId(state)
+  }
+
+  const clean = () => {
+    setIsInitialized(false)
+    setCurrentUser({})
+    setChannels(new Map())
+    setUsers(new Map())
+    setSelectedChannelId(undefined)
+  }
+  const publicChannels = () => {
+    const publicChannels = []
+    channels.forEach((channel) => {
+      if (channel.type === 'PUBLIC') {
+        publicChannels.push(channel)
+      }
+    })
+    // publicChannels.sort((a, b) => {
+    //   if (a.name === 'General') {
+    //     return -1
+    //   } else if (b.name === 'General') {
+    //     return 1
+    //   }
+    //   return b.name < a.name ? 1 : -1
+    // })
+
+    return publicChannels[0].id
   }
 
   // FETCH FUNCTIONS
@@ -110,8 +155,16 @@ export function ProviderContextComponent({ children }) {
 
   // SOCKETS EVENTS
 
-  const init = () => {
+  const init = async () => {
     socket.connect()
+
+    const res = await socket.emitWithAck('channel:list', { size: 100 })
+    res.data.forEach((channel) => addChannel(channel))
+    if (selectedChannelId) {
+      await loadMessagesForSelectedChannel()
+    }
+    setIsInitialized(true)
+    return publicChannels()
   }
 
   const selectedChannel = () => {
@@ -121,10 +174,10 @@ export function ProviderContextComponent({ children }) {
     return (channelId) => selectedChannelId === channelId
   }
 
-  const selectChannel = (channelId) => {
+  const selectChannel = async (channelId) => {
     setSelectedChannelId(channelId)
 
-    // await loadMessagesForSelectedChannel()
+    await loadMessagesForSelectedChannel()
     // await ackLastMessageIfNecessary()
   }
 
@@ -144,6 +197,7 @@ export function ProviderContextComponent({ children }) {
         const res = await socket.emitWithAck('channel:list', {
           size: 100,
         })
+        console.log(res)
 
         if (res.status === 'OK') {
           res.data.forEach((channel) => addChannel(channel))
@@ -155,7 +209,7 @@ export function ProviderContextComponent({ children }) {
 
     socket.on('channel:created', () => console.log('channel:cerated'))
     socket.on('channel:joined', () => console.log('channel:joined'))
-    socket.on('message:sent', () => console.log('message:sent'))
+    socket.on('message:sent', (message) => addMessage(message, true))
     socket.on('user:connected', () => console.log('user:connected'))
     socket.on('user:disconnected', () => console.log('user:disconnected'))
     socket.on('message:typing', () => console.log('message:typing'))
@@ -217,19 +271,20 @@ export function ProviderContextComponent({ children }) {
     order = 'backward',
     force = false
   ) => {
-    const channel = selectedChannel()
+    const channel = { ...selectedChannel() }
 
     if (!channel || (channel.isLoaded && !force)) {
       return
     }
+
     const query = {
       size: 20,
-      channelId: this.selectedChannelId,
+      channelId: selectedChannelId,
     }
 
     if (order === 'backward') {
       query.orderBy = 'id:desc'
-      if (channel.messages.length) {
+      if (channel.messages?.length) {
         query.after = channel.messages[0].id
       }
     } else {
@@ -240,11 +295,92 @@ export function ProviderContextComponent({ children }) {
     }
 
     const res = await socket.emitWithAck('message:list', query)
-    console.log(res)
 
     if (res.status !== 'OK') {
       return
     }
+
+    res.data.forEach((message) => addMessage(message))
+
+    const newSelectedChannel = {
+      ...channel,
+      isLoaded: true,
+      hasMore: res.hasMore,
+    }
+    if (newSelectedChannel.id !== undefined) {
+      setChannels((prev) => {
+        const newMap = new Map(prev)
+        const channel = newSelectedChannel
+
+        newMap.set(newSelectedChannel.id, {
+          ...channel,
+          isLoaded: true,
+          hasMore: res.hasMore,
+        })
+
+        return newMap
+      })
+    }
+  }
+
+  const sendMessage = async (content) => {
+    const message = {
+      id: undefined,
+      from: currentUser.id,
+      channelId: selectedChannelId,
+      content,
+    }
+
+    addMessage(message)
+
+    const payload = {
+      channelId: selectedChannelId,
+      content,
+    }
+
+    const res = await socket.emitWithAck('message:send', payload)
+
+    if (res.status === 'OK') {
+      message.id = res.data.id
+      message.mid = parseInt(message.id, 10)
+    }
+  }
+
+  const getUser = async (userId) => {
+    if (currentUser?.id) {
+      return currentUser
+    }
+
+    if (users.has(userId)) {
+      return users.get(userId)
+    }
+
+    if (pendingUsers.has(userId)) {
+      return pendingUsers.get(userId)
+    }
+
+    const promise = socket
+      .emitWithAck('user:get', { userId })
+      .then((res) => {
+        if (res.status === 'OK') {
+          const user = res.data
+          setUsers((prev) => {
+            prev.set(userId, res.data)
+          })
+          return user
+        }
+      })
+      .catch((err) => console.log('Error al en getUser', err))
+      .finally(() => {
+        setPendingUsers((prev) => {
+          prev.delete(userId)
+        })
+      })
+    setPendingUsers((prev) => {
+      prev.set(userId, promise)
+    })
+
+    return promise
   }
 
   const store = {
@@ -254,6 +390,9 @@ export function ProviderContextComponent({ children }) {
         modifyConectionState,
         modifyCurrentUser,
         modifyIsInitialized,
+        modifySelectedChannelId,
+        clean,
+        modifyChannels,
       },
       fetchFunc: {
         login,
@@ -263,6 +402,9 @@ export function ProviderContextComponent({ children }) {
       socketsEvent: {
         bindActions,
         init,
+        selectChannel,
+        selectedChannel,
+        sendMessage,
       },
     },
   }

@@ -3,6 +3,7 @@ import { createBrowserRouter } from 'react-router-dom'
 import RootLayout from '../components/Layout.jsx'
 import Home from '../views/Home.jsx'
 import Login from '../views/Login.jsx'
+import ChannelView from '../views/ChannelView.jsx'
 
 export const router = createBrowserRouter([
   {
@@ -14,9 +15,13 @@ export const router = createBrowserRouter([
         element: <Home />,
       },
       {
-        path: '/login',
-        element: <Login />,
+        path: '/c/:channelId',
+        element: <ChannelView />,
       },
     ],
+  },
+  {
+    path: '/login',
+    element: <Login />,
   },
 ])

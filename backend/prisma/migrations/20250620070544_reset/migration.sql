@@ -2,6 +2,28 @@
 CREATE TYPE "ChannelType" AS ENUM ('PUBLIC', 'PRIVATE');
 
 -- CreateTable
+CREATE TABLE "User" (
+    "id" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "user_name" TEXT NOT NULL,
+    "is_online" BOOLEAN NOT NULL DEFAULT false,
+    "last_ping" TIMESTAMP(3),
+    "password" TEXT NOT NULL,
+
+    CONSTRAINT "User_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "sessions" (
+    "id" TEXT NOT NULL,
+    "sid" TEXT NOT NULL,
+    "data" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "sessions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "Channel" (
     "id" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -13,7 +35,7 @@ CREATE TABLE "Channel" (
 
 -- CreateTable
 CREATE TABLE "Message" (
-    "id" BIGSERIAL NOT NULL,
+    "id" SERIAL NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "fromUserId" TEXT NOT NULL,
     "channelId" TEXT NOT NULL,
@@ -26,8 +48,17 @@ CREATE TABLE "Message" (
 CREATE TABLE "UserChannel" (
     "userId" TEXT NOT NULL,
     "channelId" TEXT NOT NULL,
-    "clientOffset" BIGINT
+    "clientOffset" INTEGER
 );
+
+-- CreateIndex
+CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "User_user_name_key" ON "User"("user_name");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "sessions_sid_key" ON "sessions"("sid");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Channel_name_key" ON "Channel"("name");
